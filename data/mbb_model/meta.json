@@ -1,0 +1,27 @@
+{
+  "trained_at": "2026-10-14 22:02:36 UTC",
+  "seasons": [2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2022, 2023, 2024, 2025, 2026],
+  "excluded_seasons": 2021,
+  "n_games": 112705,
+  "nrounds": 382,
+  "feature_names": ["adj_off_pre_diff", "adj_def_pre_diff", "adj_net_pre_diff", "off_eff_pre_diff", "def_eff_pre_diff", "rec_off_pre_diff", "rec_def_pre_diff", "rec_margin_pre_diff", "fg3a_rate_pre_diff", "tov_rate_pre_diff", "orb_rate_pre_diff", "ftr_pre_diff", "drb_rate_pre_diff", "pace_pre_diff", "road_margin_pre_diff", "road_wp_pre_diff", "sos_pre_diff", "rest_days_diff", "prior_net_diff", "min_gp", "pace_avg", "is_neutral"],
+  "params": {
+    "booster": "gbtree",
+    "objective": "reg:squarederror",
+    "eval_metric": "rmse",
+    "eta": 0.05,
+    "max_depth": 4,
+    "subsample": 0.8,
+    "colsample_bytree": 0.8,
+    "min_child_weight": 5,
+    "lambda": 1
+  },
+  "resid_sd": 11.2788,
+  "resid_sd_early": 12.1282,
+  "resid_sd_late": 10.9233,
+  "loso_rmse": 11.2787,
+  "loso_mae": 8.8733,
+  "baseline_rmse": 11.8429,
+  "brier": 0.1771,
+  "accuracy": 0.7293
+}
