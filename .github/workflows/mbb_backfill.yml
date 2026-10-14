@@ -5,10 +5,10 @@ on:
     inputs:
       start_season:
         description: "First season (ending year, e.g. 2014 = 2013-14)"
-        default: "2014"
+        default: "2025"
       end_season:
         description: "Last season (ending year)"
-        default: "2026"
+        default: "2025"
 
 permissions:
   contents: write
