@@ -6,10 +6,10 @@
 # Run seasons in ascending order in ONE process: season N reads season N-1's
 # league means and final team ratings (prior_net) from disk.
 #
-# Outputs (data/mbb/):
-#   games_<season>.csv.gz         one row per game: home_*/away_* pre-game features + home_margin
-#   team_current_<season>.csv.gz  each team's feature state AFTER its last game (use for upcoming games)
-#   league_<season>.csv           league-average style/efficiency (fallback prior for next season)
+# Outputs (data/mbb/<season>/):
+#   games.csv.gz         one row per game: home_*/away_* pre-game features + home_margin
+#   team_current.csv.gz  each team's feature state AFTER its last game (use for upcoming games)
+#   league.csv           league-average style/efficiency (fallback prior for next season)
 
 suppressPackageStartupMessages({
   library(hoopR); library(dplyr); library(tidyr); library(readr); library(zoo)
@@ -214,7 +214,7 @@ build_season <- function(szn) {
 
   # League means as-of each date; fallback = previous season's league means (else this season's)
   own_mean <- sapply(league_cols, function(cn) mean(tg[[cn]][tg$is_real], na.rm = TRUE))
-  prev_lg_path <- file.path(out_dir, sprintf("league_%d.csv", szn - 1))
+  prev_lg_path <- file.path(out_dir, szn - 1, "league.csv")
   fb <- own_mean
   if (file.exists(prev_lg_path)) {
     pl <- read_csv(prev_lg_path, show_col_types = FALSE)
@@ -262,7 +262,7 @@ build_season <- function(szn) {
   tg <- left_join(tg, net_tbl, by = c("game_id", "opp_id")) %>% add_pre("opp_net_pre", "zero", K_SOS, "sos_pre")
 
   # Preseason prior: last season's final adjusted net rating
-  prev_cur_path <- file.path(out_dir, sprintf("team_current_%d.csv.gz", szn - 1))
+  prev_cur_path <- file.path(out_dir, szn - 1, "team_current.csv.gz")
   if (file.exists(prev_cur_path)) {
     pc <- read_csv(prev_cur_path, col_types = cols(team_id = col_character(), .default = col_guess()))
     tg <- left_join(tg, pc %>% select(team_id, prior_net = adj_net_pre), by = "team_id")
@@ -273,7 +273,9 @@ build_season <- function(szn) {
 
   current <- tg %>% filter(!is_real) %>%
     transmute(team_id, team_abbrev, team_name, as_of = last_date, across(all_of(feat_cols)))
-  write_csv(rnd(current), file.path(out_dir, sprintf("team_current_%d.csv.gz", szn)))
+  season_dir <- file.path(out_dir, szn)
+  dir.create(season_dir, recursive = TRUE, showWarnings = FALSE)
+  write_csv(rnd(current), file.path(season_dir, "team_current.csv.gz"))
 
   real <- tg %>% filter(is_real)
   home <- real %>% filter(location == "home" | (location == "neutral" & team_id < opp_id)) %>%
@@ -287,10 +289,10 @@ build_season <- function(szn) {
                              across(all_of(feat_cols))) %>%
     rename_with(~ paste0("away_", .x), all_of(feat_cols))
   games <- inner_join(home, away, by = c("game_id", "away_id")) %>% arrange(game_date, game_id)
-  write_csv(rnd(games), file.path(out_dir, sprintf("games_%d.csv.gz", szn)))
+  write_csv(rnd(games), file.path(season_dir, "games.csv.gz"))
 
   write_csv(tibble(metric = league_cols, value = unname(own_mean)),
-            file.path(out_dir, sprintf("league_%d.csv", szn)))
+            file.path(season_dir, "league.csv"))
 
   chk <- games %>% filter(home_gp >= 10, away_gp >= 10)
   message(sprintf("  %d games, %d teams | corr(adj_net diff, margin | gp>=10) = %.3f | prior_net coverage %.0f%%",
