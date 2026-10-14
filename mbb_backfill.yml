@@ -1,0 +1,50 @@
+name: MBB Backfill
+
+on:
+  workflow_dispatch:
+    inputs:
+      start_season:
+        description: "First season (ending year, e.g. 2014 = 2013-14)"
+        default: "2014"
+      end_season:
+        description: "Last season (ending year)"
+        default: "2026"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: mbb-data
+  cancel-in-progress: false
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true
+
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          packages: any::hoopR, any::dplyr, any::tidyr, any::readr, any::zoo
+          cache-version: 1
+
+      - name: Build features
+        run: Rscript mbb_backfill.R ${{ inputs.start_season }} ${{ inputs.end_season }}
+
+      # Commit whatever finished, even if a later season failed
+      - name: Commit data
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/mbb
+          git diff --cached --quiet || git commit -m "MBB backfill ${{ inputs.start_season }}-${{ inputs.end_season }}"
+          git pull --rebase origin ${{ github.ref_name }}
+          git push
