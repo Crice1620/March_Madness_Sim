@@ -5,10 +5,10 @@ on:
     inputs:
       start_season:
         description: "First season (ending year, e.g. 2014 = 2013-14)"
-        default: "2025"
+        default: "2014"
       end_season:
         description: "Last season (ending year)"
-        default: "2025"
+        default: "2026"
 
 permissions:
   contents: write
@@ -32,7 +32,7 @@ jobs:
 
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
-          packages: any::hoopR, any::dplyr, any::tidyr, any::readr, any::zoo
+          packages: any::hoopR, any::dplyr, any::tidyr, any::readr, any::zoo, any::httr, any::jsonlite
           cache-version: 1
 
       - name: Build features
