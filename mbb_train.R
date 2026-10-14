@@ -3,7 +3,7 @@
 # Trains the margin model on COMPLETED seasons only, with leave-one-season-out validation.
 # Usage: Rscript mbb_train.R [first_season] [last_season]
 # Defaults: first = 2015, last = most recent completed season (season ends in April).
-# Reads data/mbb/games_<season>.csv.gz, writes data/mbb_model/.
+# Reads data/mbb/<season>/games.csv.gz, writes data/mbb_model/.
 
 suppressPackageStartupMessages({
   library(dplyr); library(readr); library(xgboost); library(jsonlite)
@@ -20,8 +20,9 @@ out_dir <- "data/mbb_model"
 dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
 
 # ---- load games -------------------------------------------------------------
-files   <- list.files("data/mbb", pattern = "^games_\\d{4}\\.csv\\.gz$", full.names = TRUE)
-seasons <- as.integer(gsub("\\D", "", basename(files)))
+files   <- list.files("data/mbb", pattern = "^games\\.csv\\.gz$", recursive = TRUE, full.names = TRUE)
+seasons <- suppressWarnings(as.integer(basename(dirname(files))))
+files   <- files[!is.na(seasons)]; seasons <- seasons[!is.na(seasons)]
 keep    <- seasons >= first_season & seasons <= last_season & !(seasons %in% exclude)
 if (sum(keep) < 3) stop("Need at least 3 seasons of games files; found ", sum(keep))
 message("Training seasons: ", paste(sort(seasons[keep]), collapse = ", "))
