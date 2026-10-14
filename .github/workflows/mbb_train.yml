@@ -2,7 +2,7 @@ name: MBB Train
 
 on:
   schedule:
-    # April 20 each year, after the title game and hoopR's data lag
+    # June 1 each year, after the title game and hoopR's data lag
     - cron: "0 14 1 6 *"
   workflow_dispatch:
     inputs:
