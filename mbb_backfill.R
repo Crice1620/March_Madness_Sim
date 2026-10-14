@@ -13,6 +13,7 @@
 
 suppressPackageStartupMessages({
   library(hoopR); library(dplyr); library(tidyr); library(readr); library(zoo)
+  library(httr); library(jsonlite)
 })
 
 args <- commandArgs(trailingOnly = TRUE)
@@ -67,11 +68,39 @@ roll_pre <- function(x, n) {
   dplyr::lag(r)
 }
 
+# Final scores for one day from the ESPN scoreboard (D1 = groups 50).
+# ESPN team ids match hoopR's team_id, so no abbreviation crosswalk is needed.
+fetch_espn_final <- function(date) {
+  url <- paste0("https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard",
+                "?limit=500&groups=50&dates=", format(date, "%Y%m%d"))
+  resp <- tryCatch(GET(url, timeout(30)), error = function(e) NULL)
+  if (is.null(resp) || status_code(resp) != 200) return(tibble())
+  raw <- tryCatch(fromJSON(content(resp, "text", encoding = "UTF-8"), simplifyVector = FALSE),
+                  error = function(e) NULL)
+  if (is.null(raw) || length(raw$events) == 0) return(tibble())
+  rows <- lapply(raw$events, function(ev) {
+    if (!identical(ev$status$type$name, "STATUS_FINAL")) return(NULL)
+    comp <- ev$competitions[[1]]
+    h <- Filter(function(cc) identical(cc$homeAway, "home"), comp$competitors)
+    a <- Filter(function(cc) identical(cc$homeAway, "away"), comp$competitors)
+    if (length(h) != 1 || length(a) != 1) return(NULL)
+    tibble(game_id = as.character(ev$id), game_date = as.Date(date),
+           home_id = as.character(h[[1]]$team$id), away_id = as.character(a[[1]]$team$id),
+           home_score = suppressWarnings(as.numeric(h[[1]]$score)),
+           away_score = suppressWarnings(as.numeric(a[[1]]$score)),
+           neutral = isTRUE(comp$neutralSite))
+  })
+  out <- bind_rows(rows)
+  if (nrow(out) == 0) return(out)
+  filter(out, !is.na(home_score), !is.na(away_score))
+}
+
 # ---- main per-season builder ----------------------------------------------
 
 build_season <- function(szn) {
   message("=== Season ", szn, " ===")
-  tb <- load_mbb_team_box(seasons = szn)
+  tb <- tryCatch(load_mbb_team_box(seasons = szn), error = function(e) NULL)
+  if (is.null(tb) || nrow(tb) == 0) { message("No games yet for ", szn, "; skipping"); return(TRUE) }
 
   need <- c("game_id", "game_date", "team_id", "team_abbreviation", "team_display_name",
             "team_home_away", "team_score", "opponent_team_score", "field_goals_attempted",
@@ -132,6 +161,48 @@ build_season <- function(szn) {
     is_real   = TRUE
   ) %>% select(game_id, game_date, team_id, team_abbrev, team_name, opp_id, location, score, opp_score,
                off_eff, def_eff, all_of(style_cols), margin, win, is_real)
+
+  # ESPN scoreboard supplement (current season only): fills games hoopR hasn't posted yet.
+  # ESPN gives scores only, so possessions are estimated from the two teams' average pace and
+  # style rates stay NA for these rows (the expanding means skip NAs). Once hoopR posts the real
+  # box score, the next daily rebuild replaces these rows automatically.
+  tg$espn_only <- FALSE
+  if (szn == default_season) {
+    sup_dates <- seq(max(max(tg$game_date) - 2, Sys.Date() - 14), Sys.Date(), by = "day")
+    esp <- bind_rows(lapply(sup_dates, function(d) { Sys.sleep(0.15); fetch_espn_final(d) }))
+    if (nrow(esp) > 0) {
+      new_g <- esp %>% distinct(game_id, .keep_all = TRUE) %>%
+        filter(!game_id %in% tb$game_id, home_id %in% d1_ids, away_id %in% d1_ids)
+      if (nrow(new_g) > 0) {
+        lookup  <- tg %>% group_by(team_id) %>% slice(1) %>% ungroup() %>% select(team_id, team_abbrev, team_name)
+        tm_pace <- tg %>% group_by(team_id) %>% summarise(p = mean(pace, na.rm = TRUE), .groups = "drop")
+        lg_p    <- mean(tg$pace, na.rm = TRUE)
+        mk <- function(df, side) {
+          if (side == "home")
+            df %>% transmute(game_id, game_date, team_id = home_id, opp_id = away_id,
+                             location = ifelse(neutral, "neutral", "home"),
+                             score = home_score, opp_score = away_score)
+          else
+            df %>% transmute(game_id, game_date, team_id = away_id, opp_id = home_id,
+                             location = ifelse(neutral, "neutral", "away"),
+                             score = away_score, opp_score = home_score)
+        }
+        extra <- bind_rows(mk(new_g, "home"), mk(new_g, "away")) %>%
+          left_join(lookup, by = "team_id") %>%
+          left_join(tm_pace %>% rename(p_team = p), by = "team_id") %>%
+          left_join(tm_pace %>% rename(opp_id = team_id, p_opp = p), by = "opp_id") %>%
+          mutate(avg_poss = (coalesce(p_team, lg_p) + coalesce(p_opp, lg_p)) / 2,
+                 off_eff = score / avg_poss * 100, def_eff = opp_score / avg_poss * 100,
+                 fg3a_rate = NA_real_, tov_rate = NA_real_, orb_rate = NA_real_,
+                 ftr = NA_real_, drb_rate = NA_real_, pace = avg_poss,
+                 margin = score - opp_score, win = as.numeric(score > opp_score),
+                 is_real = TRUE, espn_only = TRUE) %>%
+          select(-p_team, -p_opp, -avg_poss)
+        tg <- bind_rows(tg, extra)
+        message("  ESPN supplement added ", nrow(new_g), " games")
+      }
+    }
+  }
 
   # Phantom "next game" row per team: its pre-game features == team state after all real games
   last_date <- max(tg$game_date)
@@ -209,6 +280,7 @@ build_season <- function(szn) {
     transmute(game_id, game_date, season = szn, home_id = team_id, away_id = opp_id,
               home_abbrev = team_abbrev, neutral = as.numeric(location == "neutral"),
               home_score = score, away_score = opp_score, home_margin = margin,
+              espn_only = as.numeric(espn_only),
               across(all_of(feat_cols))) %>%
     rename_with(~ paste0("home_", .x), all_of(feat_cols))
   away <- real %>% transmute(game_id, away_id = team_id, away_abbrev = team_abbrev,
