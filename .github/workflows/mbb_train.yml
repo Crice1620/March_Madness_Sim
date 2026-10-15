@@ -8,7 +8,7 @@ on:
     inputs:
       first_season:
         description: "First training season (ending year)"
-        default: "2015"
+        default: "2005"
       last_season:
         description: "Last training season (blank = most recent completed)"
         default: ""
