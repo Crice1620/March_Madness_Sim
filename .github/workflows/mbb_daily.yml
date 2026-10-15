@@ -28,10 +28,14 @@ jobs:
 
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
-          packages: any::hoopR, any::dplyr, any::tidyr, any::readr, any::zoo, any::httr, any::jsonlite
+          packages: any::hoopR, any::dplyr, any::tidyr, any::readr, any::zoo, any::httr, any::jsonlite, any::Matrix, any::glmnet
           cache-version: 1
 
-      # No args = current season (Nov+ rolls to next season's ending year)
+      # 1. Update player RAPM metrics first based on recent box scores
+      - name: Build Player RAPM
+        run: Rscript mbb_rapm.R
+
+      # 2. Rebuild current season backfill incorporating the new roster RAPMs
       - name: Rebuild current season
         run: Rscript mbb_backfill.R
 
@@ -41,6 +45,6 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add data/mbb
-          git diff --cached --quiet || git commit -m "MBB daily update $(date -u +%F)"
+          git diff --cached --quiet || git commit -m "MBB daily update with RAPM $(date -u +%F)"
           git pull --rebase origin ${{ github.ref_name }}
           git push
