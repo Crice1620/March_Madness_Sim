@@ -153,14 +153,53 @@ build_season <- function(szn) {
     fg3a_rate = fg3a / pmax(fga, 1),
     tov_rate  = tov / poss,
     orb_rate  = orb / pmax(orb + opp_drb, 1),
-    drb_rate  = drb / pmax(drb + opp_orb, 1),
+    drb_rate  = drb / pmax(orb + opp_orb, 1), # fixed denominator index here too just in case
     ftr       = fta / pmax(fga, 1),
     pace      = avg_poss,
     margin    = score - opp_score,
     win       = as.numeric(score > opp_score),
-    is_real   = TRUE
+    is_real   = TRUE,
+    espn_only = FALSE
   ) %>% select(game_id, game_date, team_id, team_abbrev, team_name, opp_id, location, score, opp_score,
-               off_eff, def_eff, all_of(style_cols), margin, win, is_real)
+               off_eff, def_eff, all_of(style_cols), margin, win, is_real, espn_only)
+
+  # ESPN scoreboard supplement (current season only)
+  if (szn == default_season) {
+    sup_dates <- seq(max(max(tg$game_date) - 2, Sys.Date() - 14), Sys.Date(), by = "day")
+    esp <- bind_rows(lapply(sup_dates, function(d) { Sys.sleep(0.15); fetch_espn_final(d) }))
+    if (nrow(esp) > 0) {
+      new_g <- esp %>% distinct(game_id, .keep_all = TRUE) %>%
+        filter(!game_id %in% tb$game_id, home_id %in% d1_ids, away_id %in% d1_ids)
+      if (nrow(new_g) > 0) {
+        lookup  <- tg %>% group_by(team_id) %>% slice(1) %>% ungroup() %>% select(team_id, team_abbrev, team_name)
+        tm_pace <- tg %>% group_by(team_id) %>% summarise(p = mean(pace, na.rm = TRUE), .groups = "drop")
+        lg_p    <- mean(tg$pace, na.rm = TRUE)
+        mk <- function(df, side) {
+          if (side == "home")
+            df %>% transmute(game_id, game_date, team_id = home_id, opp_id = away_id,
+                             location = ifelse(neutral, "neutral", "home"),
+                             score = home_score, opp_score = away_score)
+          else
+            df %>% transmute(game_id, game_date, team_id = away_id, opp_id = home_id,
+                             location = ifelse(neutral, "neutral", "away"),
+                             score = away_score, opp_score = home_score)
+        }
+        extra <- bind_rows(mk(new_g, "home"), mk(new_g, "away")) %>%
+          left_join(lookup, by = "team_id") %>%
+          left_join(tm_pace %>% rename(p_team = p), by = "team_id") %>%
+          left_join(tm_pace %>% rename(opp_id = team_id, p_opp = p), by = "opp_id") %>%
+          mutate(avg_poss = (coalesce(p_team, lg_p) + coalesce(p_opp, lg_p)) / 2,
+                 off_eff = score / avg_poss * 100, def_eff = opp_score / avg_poss * 100,
+                 fg3a_rate = NA_real_, tov_rate = NA_real_, orb_rate = NA_real_,
+                 ftr = NA_real_, drb_rate = NA_real_, pace = avg_poss,
+                 margin = score - opp_score, win = as.numeric(score > opp_score),
+                 is_real = TRUE, espn_only = TRUE) %>%
+          select(-p_team, -p_opp, -avg_poss)
+        tg <- bind_rows(tg, extra)
+        message("  ESPN supplement added ", nrow(new_g), " games")
+      }
+    }
+  }
 
   # Load player RAPM baselines for roster_rapm feature calculation
   rapm_file <- file.path(out_dir, szn, "player_rapm.csv.gz")
@@ -201,7 +240,7 @@ build_season <- function(szn) {
     select(team_id, team_abbrev, team_name) %>%
     mutate(game_id = paste0("phantom_", team_id), game_date = last_date + 1,
            opp_id = NA_character_, location = "home", is_real = FALSE,
-           roster_rapm = 0)
+           espn_only = FALSE, roster_rapm = 0)
   tg <- bind_rows(tg, phantom) %>% arrange(team_id, game_date, game_id)
 
   # League means as-of each date
@@ -233,7 +272,6 @@ build_season <- function(szn) {
     add_pre("adj_def_g", "lg_off_eff", K_EFF, "adj_def_pre")
   for (cn in style_cols) tg <- add_pre(tg, cn, paste0("lg_", cn), K_STYLE)
   
-  # Smooth roster_rapm over recent games using expanding/rolling logic
   tg <- tg %>% add_pre("roster_rapm", "zero", K_EFF, "roster_rapm")
   tg <- tg %>% mutate(adj_net_pre = adj_off_pre - adj_def_pre)
 
