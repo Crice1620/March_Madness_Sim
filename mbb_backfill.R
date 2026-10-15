@@ -32,7 +32,8 @@ league_cols <- c("off_eff", style_cols)
 feat_cols <- c("gp", "adj_off_pre", "adj_def_pre", "adj_net_pre", "off_eff_pre", "def_eff_pre",
                "rec_off_pre", "rec_def_pre", "rec_margin_pre",
                paste0(style_cols, "_pre"),
-               "road_margin_pre", "road_wp_pre", "sos_pre", "rest_days", "prior_net")
+               "road_margin_pre", "road_wp_pre", "sos_pre", "rest_days", "prior_net",
+               "roster_rapm")
 
 # ---- helpers ---------------------------------------------------------------
 
