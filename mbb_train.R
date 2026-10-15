@@ -1,162 +1,110 @@
 #!/usr/bin/env Rscript
 # mbb_train.R
-# Trains the margin model on COMPLETED seasons only, with leave-one-season-out validation.
-# Usage: Rscript mbb_train.R [first_season] [last_season]
-# Defaults: first = 2015, last = most recent completed season (season ends in April).
-# Reads data/mbb/<season>/games.csv.gz, writes data/mbb_model/.
+# Trains separate XGBoost models for Efficiency Margin and Total Possessions
+# across historical NCAA MBB backfill datasets.
 
 suppressPackageStartupMessages({
-  library(dplyr); library(readr); library(xgboost); library(jsonlite)
+  library(readr); library(dplyr); library(xgboost); library(jsonlite)
 })
-source("mbb_model_lib.R")
 
-args <- commandArgs(trailingOnly = TRUE)
-cur_year <- as.integer(format(Sys.Date(), "%Y")); cur_month <- as.integer(format(Sys.Date(), "%m"))
-last_complete <- ifelse(cur_month <= 4, cur_year - 1L, cur_year)
-first_season  <- if (length(args) >= 1) as.integer(args[1]) else 2015L
-last_season   <- if (length(args) >= 2) as.integer(args[2]) else last_complete
-exclude       <- c(2021L)   # COVID-distorted season
-out_dir <- "data/mbb_model"
-dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
+out_dir <- "data/mbb"
+model_dir <- "models/mbb"
+dir.create(model_dir, recursive = TRUE, showWarnings = FALSE)
 
-# ---- load games -------------------------------------------------------------
-files   <- list.files("data/mbb", pattern = "^games\\.csv\\.gz$", recursive = TRUE, full.names = TRUE)
-seasons <- suppressWarnings(as.integer(basename(dirname(files))))
-files   <- files[!is.na(seasons)]; seasons <- seasons[!is.na(seasons)]
-keep    <- seasons >= first_season & seasons <= last_season & !(seasons %in% exclude)
-if (sum(keep) < 3) stop("Need at least 3 seasons of games files; found ", sum(keep))
-message("Training seasons: ", paste(sort(seasons[keep]), collapse = ", "))
+# Discover available backfilled seasons
+mbb_dirs <- list.dirs(out_dir, full.names = FALSE, recursive = FALSE)
+seasons <- sort(suppressWarnings(as.integer(mbb_dirs)))
+seasons <- seasons[!is.na(seasons) & seasons != 2021] # exclude COVID season
 
-games <- bind_rows(lapply(files[keep], function(f)
-  read_csv(f, col_types = cols(game_id = col_character(), home_id = col_character(),
-                               away_id = col_character(), .default = col_guess()),
-           show_col_types = FALSE)))
-if (!"espn_only" %in% names(games)) games$espn_only <- 0
-games <- games %>% filter(coalesce(espn_only, 0) == 0, !is.na(home_margin))
+message("Training seasons: ", paste(seasons, collapse = ", "))
 
-pull_side <- function(prefix)
-  games %>% select(all_of(paste0(prefix, feat_cols))) %>% rename_with(~ sub(paste0("^", prefix), "", .x))
-h <- pull_side("home_"); a <- pull_side("away_")
+# Load all historical game rows
+games_list <- lapply(seasons, function(szn) {
+  p <- file.path(out_dir, szn, "games.csv.gz")
+  if (file.exists(p)) read_csv(p, show_col_types = FALSE) else NULL
+})
+all_games <- bind_rows(games_list)
 
-X <- matchup_features(h, a, games$neutral)
-feature_names <- names(X)
-
-# Neutral games have an arbitrary "home" side, so add the flipped copy (margin negated)
-nz <- which(games$neutral == 1)
-Xf <- matchup_features(a[nz, ], h[nz, ], 1)[, feature_names]
-X_all      <- rbind(X, Xf)
-y_all      <- c(games$home_margin, -games$home_margin[nz])
-season_all <- c(games$season, games$season[nz])
-is_aug     <- c(rep(0, nrow(X)), rep(1, length(nz)))
-message(sprintf("%d games (%d neutral, flipped copies added) | %d features",
-                nrow(games), length(nz), length(feature_names)))
-
-# ---- params + choose number of rounds with season-grouped CV ----------------
-params <- list(booster = "gbtree", objective = "reg:squarederror", eval_metric = "rmse",
-               eta = 0.05, max_depth = 4, subsample = 0.8, colsample_bytree = 0.8,
-               min_child_weight = 5, lambda = 1, seed = 42)
-set.seed(42)
-dall  <- xgb.DMatrix(as.matrix(X_all), label = y_all)
-folds <- lapply(sort(unique(season_all)), function(s) which(season_all == s))
-
-cv <- xgb.cv(params = params, data = dall, nrounds = 1000, folds = folds,
-             early_stopping_rounds = 40, verbose = 0)
-best_n <- tryCatch({
-  n <- cv$best_iteration
-  if (is.null(n) || length(n) == 0 || is.na(n) || n < 1) which.min(cv$evaluation_log$test_rmse_mean) else as.integer(n)
-}, error = function(e) which.min(cv$evaluation_log$test_rmse_mean))
-best_n <- max(1L, as.integer(best_n))
-message("Rounds chosen by season-grouped CV: ", best_n)
-
-# ---- honest leave-one-season-out predictions --------------------------------
-oof <- rep(NA_real_, length(y_all)); base_pred <- rep(NA_real_, length(y_all))
-dat_lm <- data.frame(y = y_all, d = X_all$adj_net_pre_diff, n = X_all$is_neutral)
-for (i in seq_along(folds)) {
-  te <- folds[[i]]; tr <- setdiff(seq_along(y_all), te)
-  m <- xgb.train(params = params, data = xgb.DMatrix(as.matrix(X_all[tr, ]), label = y_all[tr]),
-                 nrounds = best_n, verbose = 0)
-  oof[te] <- predict(m, xgb.DMatrix(as.matrix(X_all[te, ])))
-  base_pred[te] <- predict(lm(y ~ d + n, data = dat_lm[tr, ]), newdata = dat_lm[te, ])
+if (nrow(all_games) == 0) {
+  stop("No historical games found for training. Run mbb_backfill.R first.")
 }
 
-ev  <- is_aug == 0
-res <- y_all[ev] - oof[ev]
-loso_rmse <- sqrt(mean(res^2)); loso_mae <- mean(abs(res))
-resid_sd  <- sd(res)
-early     <- X_all$min_gp[ev] < 8
-resid_sd_early <- sd(res[early], na.rm = TRUE)
-resid_sd_late  <- sd(res[!early], na.rm = TRUE)
-base_rmse <- sqrt(mean((y_all[ev] - base_pred[ev])^2))
-p_home <- pnorm(oof[ev] / resid_sd); won <- as.numeric(y_all[ev] > 0)
-brier  <- mean((p_home - won)^2)
-acc    <- mean((oof[ev] > 0) == (y_all[ev] > 0))
+style_cols <- c("fg3a_rate", "tov_rate", "orb_rate", "ftr", "drb_rate", "pace")
+feat_cols <- c("gp", "adj_off_pre", "adj_def_pre", "adj_net_pre", "off_eff_pre", "def_eff_pre",
+               "rec_off_pre", "rec_def_pre", "rec_margin_pre",
+               paste0(style_cols, "_pre"),
+               "road_margin_pre", "road_wp_pre", "sos_pre", "rest_days", "prior_net",
+               "roster_rapm")
 
-by_season <- tibble(season = season_all[ev], err = res) %>% group_by(season) %>%
-  summarise(games = n(), rmse = sqrt(mean(err^2)), .groups = "drop")
-print(as.data.frame(by_season))
-message(sprintf(paste0("LOSO RMSE %.2f | MAE %.2f | resid SD %.2f (early-season %.2f, later %.2f)\n",
-                       "Baseline (linear on adj-net diff + neutral) RMSE %.2f | SD of margins %.2f\n",
-                       "Brier %.4f | straight-up accuracy %.1f%%"),
-                loso_rmse, loso_mae, resid_sd, resid_sd_early, resid_sd_late,
-                base_rmse, sd(y_all[ev]), brier, 100 * acc))
+# Build difference/sum features for matchup modeling
+home_feats <- paste0("home_", feat_cols)
+away_feats <- paste0("away_", feat_cols)
 
-# ---- Experiments: does a different target beat the direct-margin model? -------
-# Needs game_poss in the games files (re-run mbb_backfill.R once to add it).
-# Everything is scored on the ACTUAL point margin, with the same season-held-out folds.
-if ("game_poss" %in% names(games) && all(!is.na(games$game_poss))) {
-  message("\nTarget experiments (season-held-out, scored on actual margin):")
-  poss_all <- c(games$game_poss, games$game_poss[nz])
-  em_all   <- y_all / poss_all * 100          # efficiency margin per 100 possessions
+# Ensure all feature columns exist
+missing_cols <- setdiff(c(home_feats, away_feats), names(all_games))
+if (length(missing_cols) > 0) {
+  stop("Missing features in games data: ", paste(missing_cols, collapse = ", "))
+}
 
-  run_loso <- function(y, label) {
-    cvr <- xgb.cv(params = params, data = xgb.DMatrix(as.matrix(X_all), label = y), nrounds = 1000,
-                  folds = folds, early_stopping_rounds = 40, verbose = 0)
-    n <- tryCatch({ b <- cvr$best_iteration
-      if (is.null(b) || length(b) == 0 || is.na(b) || b < 1) which.min(cvr$evaluation_log$test_rmse_mean) else as.integer(b)
-    }, error = function(e) which.min(cvr$evaluation_log$test_rmse_mean))
-    n <- max(1L, as.integer(n))
-    pr <- rep(NA_real_, length(y))
-    for (i in seq_along(folds)) {
-      te <- folds[[i]]; tr <- setdiff(seq_along(y), te)
-      m <- xgb.train(params = params, data = xgb.DMatrix(as.matrix(X_all[tr, ]), label = y[tr]),
-                     nrounds = n, verbose = 0)
-      pr[te] <- predict(m, xgb.DMatrix(as.matrix(X_all[te, ])))
-    }
-    message(sprintf("  trained: %-34s rounds %d", label, n))
-    list(pred = pr, n = n)
-  }
-  score_it <- function(label, p)
-    tibble(model = label, rmse = sqrt(mean((y_all[ev] - p[ev])^2)), mae = mean(abs(y_all[ev] - p[ev])))
+# Target calculations:
+# 1. Efficiency Margin per 100 possessions = (home_margin / game_poss) * 100
+# 2. Total Game Possessions = game_poss
+training_df <- all_games %>%
+  filter(!is.na(home_margin), !is.na(game_poss), game_poss > 0) %>%
+  mutate(
+    eff_margin = (home_margin / game_poss) * 100
+  )
 
-  r_clip <- run_loso(pmax(pmin(y_all, 25), -25), "direct margin, clipped +/-25")
-  r_em   <- run_loso(em_all, "efficiency margin")
-  r_emc  <- run_loso(pmax(pmin(em_all, 35), -35), "efficiency margin, clipped +/-35")
-  r_poss <- run_loso(poss_all, "possessions")
+# Construct feature matrix (Home - Away differences for symmetry, plus game context like neutral site)
+# We map each feature difference as Home minus Away
+X_matrix_list <- lapply(feat_cols, function(fc) {
+  training_df[[paste0("home_", fc)]] - training_df[[paste0("away_", fc)]]
+})
+names(X_matrix_list) <- paste0(feat_cols, "_diff")
 
-  m_dec  <- r_em$pred  / 100 * r_poss$pred
-  m_decc <- r_emc$pred / 100 * r_poss$pred
-  cmp <- bind_rows(
-    score_it("direct margin (current)", oof),
-    score_it("direct margin, clipped target", r_clip$pred),
-    score_it("eff margin x possessions", m_dec),
-    score_it("eff margin (clipped) x possessions", m_decc),
-    score_it("average: direct + eff x poss", (oof + m_dec) / 2))
-  print(as.data.frame(cmp))
-  message(sprintf("Possessions model RMSE %.2f vs %.2f for predicting the average",
-                  sqrt(mean((poss_all[ev] - r_poss$pred[ev])^2)), sd(poss_all[ev])))
-  write_csv(cmp, file.path(out_dir, "target_comparison.csv"))
-} else message("\nSkipping target experiments: re-run mbb_backfill.R to add game_poss to the games files")
+X_df <- bind_cols(
+  as_tibble(X_matrix_list),
+  neutral = training_df$neutral,
+  home_rest = training_df$home_rest_days,
+  away_rest = training_df$away_rest_days
+)
 
-# ---- final model on all training seasons ------------------------------------
-final <- xgb.train(params = params, data = dall, nrounds = best_n, verbose = 0)
-xgb.save(final, file.path(out_dir, "xgb_model.json"))
-write_csv(as.data.frame(xgb.importance(model = final)), file.path(out_dir, "feature_importance.csv"))
-write_csv(by_season, file.path(out_dir, "loso_by_season.csv"))
-write_json(list(
-  trained_at = format(Sys.time(), tz = "UTC", usetz = TRUE),
-  seasons = sort(unique(games$season)), excluded_seasons = exclude,
-  n_games = nrow(games), nrounds = best_n, feature_names = feature_names, params = params[names(params) != "seed"],
-  resid_sd = resid_sd, resid_sd_early = resid_sd_early, resid_sd_late = resid_sd_late,
-  loso_rmse = loso_rmse, loso_mae = loso_mae, baseline_rmse = base_rmse, brier = brier, accuracy = acc
-), file.path(out_dir, "meta.json"), auto_unbox = TRUE, pretty = TRUE)
-message("Saved model to ", out_dir)
+X <- as.matrix(X_df)
+
+# Targets
+y_em <- training_df$eff_margin
+y_poss <- training_df$game_poss
+
+message(sprintf("Training on %d total games with %d features.", nrow(X), ncol(X)))
+
+# Train XGBoost Model 1: Efficiency Margin
+dtrain_em <- xgb.DMatrix(data = X, label = y_em)
+params_em <- list(
+  objective = "reg:squarederror",
+  eval_metric = "rmse",
+  max_depth = 4,
+  eta = 0.05,
+  subsample = 0.8,
+  colsample_bytree = 0.8
+)
+
+message("Training Efficiency Margin model...")
+model_em <- xgb.train(params = params_em, data = dtrain_em, nrounds = 350, verbose = 0)
+xgb.save(model_em, file.path(model_dir, "xgb_em.json"))
+
+# Train XGBoost Model 2: Total Game Possessions (Pace)
+dtrain_poss <- xgb.DMatrix(data = X, label = y_poss)
+params_poss <- list(
+  objective = "reg:squarederror",
+  eval_metric = "rmse",
+  max_depth = 4,
+  eta = 0.05,
+  subsample = 0.8,
+  colsample_bytree = 0.8
+)
+
+message("Training Total Possessions model...")
+model_poss <- xgb.train(params = params_poss, data = dtrain_poss, nrounds = 350, verbose = 0)
+xgb.save(model_poss, file.path(model_dir, "xgb_poss.json"))
+
+message("Models successfully trained and saved to ", model_dir, "/")
