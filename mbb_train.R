@@ -100,6 +100,53 @@ message(sprintf(paste0("LOSO RMSE %.2f | MAE %.2f | resid SD %.2f (early-season 
                 loso_rmse, loso_mae, resid_sd, resid_sd_early, resid_sd_late,
                 base_rmse, sd(y_all[ev]), brier, 100 * acc))
 
+# ---- Experiments: does a different target beat the direct-margin model? -------
+# Needs game_poss in the games files (re-run mbb_backfill.R once to add it).
+# Everything is scored on the ACTUAL point margin, with the same season-held-out folds.
+if ("game_poss" %in% names(games) && all(!is.na(games$game_poss))) {
+  message("\nTarget experiments (season-held-out, scored on actual margin):")
+  poss_all <- c(games$game_poss, games$game_poss[nz])
+  em_all   <- y_all / poss_all * 100          # efficiency margin per 100 possessions
+
+  run_loso <- function(y, label) {
+    cvr <- xgb.cv(params = params, data = xgb.DMatrix(as.matrix(X_all), label = y), nrounds = 1000,
+                  folds = folds, early_stopping_rounds = 40, verbose = 0)
+    n <- tryCatch({ b <- cvr$best_iteration
+      if (is.null(b) || length(b) == 0 || is.na(b) || b < 1) which.min(cvr$evaluation_log$test_rmse_mean) else as.integer(b)
+    }, error = function(e) which.min(cvr$evaluation_log$test_rmse_mean))
+    n <- max(1L, as.integer(n))
+    pr <- rep(NA_real_, length(y))
+    for (i in seq_along(folds)) {
+      te <- folds[[i]]; tr <- setdiff(seq_along(y), te)
+      m <- xgb.train(params = params, data = xgb.DMatrix(as.matrix(X_all[tr, ]), label = y[tr]),
+                     nrounds = n, verbose = 0)
+      pr[te] <- predict(m, xgb.DMatrix(as.matrix(X_all[te, ])))
+    }
+    message(sprintf("  trained: %-34s rounds %d", label, n))
+    list(pred = pr, n = n)
+  }
+  score_it <- function(label, p)
+    tibble(model = label, rmse = sqrt(mean((y_all[ev] - p[ev])^2)), mae = mean(abs(y_all[ev] - p[ev])))
+
+  r_clip <- run_loso(pmax(pmin(y_all, 25), -25), "direct margin, clipped +/-25")
+  r_em   <- run_loso(em_all, "efficiency margin")
+  r_emc  <- run_loso(pmax(pmin(em_all, 35), -35), "efficiency margin, clipped +/-35")
+  r_poss <- run_loso(poss_all, "possessions")
+
+  m_dec  <- r_em$pred  / 100 * r_poss$pred
+  m_decc <- r_emc$pred / 100 * r_poss$pred
+  cmp <- bind_rows(
+    score_it("direct margin (current)", oof),
+    score_it("direct margin, clipped target", r_clip$pred),
+    score_it("eff margin x possessions", m_dec),
+    score_it("eff margin (clipped) x possessions", m_decc),
+    score_it("average: direct + eff x poss", (oof + m_dec) / 2))
+  print(as.data.frame(cmp))
+  message(sprintf("Possessions model RMSE %.2f vs %.2f for predicting the average",
+                  sqrt(mean((poss_all[ev] - r_poss$pred[ev])^2)), sd(poss_all[ev])))
+  write_csv(cmp, file.path(out_dir, "target_comparison.csv"))
+} else message("\nSkipping target experiments: re-run mbb_backfill.R to add game_poss to the games files")
+
 # ---- final model on all training seasons ------------------------------------
 final <- xgb.train(params = params, data = dall, nrounds = best_n, verbose = 0)
 xgb.save(final, file.path(out_dir, "xgb_model.json"))
