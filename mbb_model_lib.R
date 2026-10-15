@@ -7,7 +7,8 @@
 feat_cols <- c("gp", "adj_off_pre", "adj_def_pre", "adj_net_pre", "off_eff_pre", "def_eff_pre",
                "rec_off_pre", "rec_def_pre", "rec_margin_pre",
                "fg3a_rate_pre", "tov_rate_pre", "orb_rate_pre", "ftr_pre", "drb_rate_pre", "pace_pre",
-               "road_margin_pre", "road_wp_pre", "sos_pre", "rest_days", "prior_net")
+               "road_margin_pre", "road_wp_pre", "sos_pre", "rest_days", "prior_net",
+               "roster_rapm")
 
 # h, a: data frames (same number of rows) with the feat_cols for the home / away team.
 # neutral: 0/1 scalar or vector. Returns the model's feature data frame.
