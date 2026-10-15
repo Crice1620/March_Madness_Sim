@@ -262,6 +262,16 @@ build_season <- function(szn) {
   net_tbl <- tg %>% select(game_id, opp_id = team_id, opp_net_pre = adj_net_pre)
   tg <- left_join(tg, net_tbl, by = c("game_id", "opp_id")) %>% add_pre("opp_net_pre", "zero", K_SOS, "sos_pre")
 
+  rapm_path <- file.path(out_dir, szn, "player_rapm.csv.gz")
+  prev_rapm_path <- file.path(out_dir, szn - 1, "player_rapm.csv.gz")
+  active_rapm <- if (file.exists(rapm_path)) {
+    read_csv(rapm_path, show_col_types = FALSE)
+  } else if (file.exists(prev_rapm_path)) {
+    read_csv(prev_rapm_path, show_col_types = FALSE)
+  } else {
+    NULL
+  }
+                     
   # Preseason prior: last season's final adjusted net rating
   prev_cur_path <- file.path(out_dir, szn - 1, "team_current.csv.gz")
   if (file.exists(prev_cur_path)) {
