@@ -282,7 +282,7 @@ build_season <- function(szn) {
     transmute(game_id, game_date, season = szn, home_id = team_id, away_id = opp_id,
               home_abbrev = team_abbrev, neutral = as.numeric(location == "neutral"),
               home_score = score, away_score = opp_score, home_margin = margin,
-              espn_only = as.numeric(espn_only),
+              espn_only = as.numeric(espn_only), game_poss = pace,   # avg possessions in the game
               across(all_of(feat_cols))) %>%
     rename_with(~ paste0("home_", .x), all_of(feat_cols))
   away <- real %>% transmute(game_id, away_id = team_id, away_abbrev = team_abbrev,
