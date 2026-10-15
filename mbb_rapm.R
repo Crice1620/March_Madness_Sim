@@ -11,13 +11,17 @@ season_arg <- if (length(args) >= 1) as.integer(args[1]) else 2026L
 
 message(sprintf("=== Building Game-Level Ridge RAPM for Season %d ===", season_arg))
 
-# 1. Load team games for outcomes & dates (ensure character game_id)
+# 1. Load team games for outcomes & dates (force all IDs to character)
 games_path <- file.path("data/mbb", season_arg, "games.csv.gz")
 if (!file.exists(games_path)) stop("Games file not found for season: ", season_arg)
 games <- read_csv(games_path, show_col_types = FALSE) %>%
-  mutate(game_id = as.character(game_id))
+  mutate(
+    game_id = as.character(game_id),
+    home_id = as.character(home_id),
+    away_id = as.character(away_id)
+  )
 
-# 2. Load player box scores for minute shares (ensure character game_id & team_id)
+# 2. Load player box scores for minute shares (force all IDs to character)
 pb <- tryCatch(load_mbb_player_box(seasons = season_arg), error = function(e) NULL)
 if (is.null(pb) || nrow(pb) == 0) {
   message("No player box data available for season ", season_arg, "; skipping RAPM.")
@@ -41,11 +45,21 @@ team_games <- pb %>%
   ungroup()
 
 # 4. Prepare design matrix inputs by joining with game net margins
-# (Assuming home_margin and game scores are available in games.csv.gz)
+# Ensuring all team_id and game_id keys are explicitly character type
 home_outcomes <- games %>%
-  transmute(game_id, team_id = home_id, opp_id = away_id, net_margin = home_margin)
+  transmute(
+    game_id = as.character(game_id), 
+    team_id = as.character(home_id), 
+    opp_id = as.character(away_id), 
+    net_margin = home_margin
+  )
 away_outcomes <- games %>%
-  transmute(game_id, team_id = away_id, opp_id = home_id, net_margin = -home_margin)
+  transmute(
+    game_id = as.character(game_id), 
+    team_id = as.character(away_id), 
+    opp_id = as.character(home_id), 
+    net_margin = -home_margin
+  )
 team_outcomes <- bind_rows(home_outcomes, away_outcomes)
 
 model_df <- team_games %>%
