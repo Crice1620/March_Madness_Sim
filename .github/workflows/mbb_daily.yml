@@ -28,23 +28,34 @@ jobs:
 
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
-          packages: any::hoopR, any::dplyr, any::tidyr, any::readr, any::zoo, any::httr, any::jsonlite, any::Matrix, any::glmnet
+          packages: any::hoopR, any::dplyr, any::tidyr, any::readr, any::zoo, any::httr, any::jsonlite, any::Matrix, any::glmnet, any::kohonen
           cache-version: 1
 
-      # 1. Update player RAPM metrics first based on recent box scores
-      - name: Build Player RAPM
-        run: Rscript mbb_rapm.R
+      # Season = ending year (Nov-Dec belong to the NEXT calendar year's season)
+      - name: Current season
+        id: season
+        run: |
+          y=$(date -u +%Y); m=$((10#$(date -u +%m)))
+          if [ "$m" -ge 11 ]; then echo "s=$((y+1))" >> "$GITHUB_OUTPUT"; else echo "s=$y" >> "$GITHUB_OUTPUT"; fi
 
-      # 2. Rebuild current season backfill incorporating the new roster RAPMs
+      # 1. Player RAPM for the CURRENT season only (no args = every season, ~20x the work)
+      - name: Build Player RAPM
+        run: Rscript mbb_rapm.R ${{ steps.season.outputs.s }} ${{ steps.season.outputs.s }}
+
+      # 2. Rebuild current season features (reads the RAPM above)
       - name: Rebuild current season
         run: Rscript mbb_backfill.R
+
+      # 3. Export the small files the Shiny app downloads
+      - name: Export app data
+        run: Rscript mbb_app_data.R
 
       - name: Commit data
         if: always()
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/mbb
-          git diff --cached --quiet || git commit -m "MBB daily update with RAPM $(date -u +%F)"
+          git add data/mbb data/mbb_app
+          git diff --cached --quiet || git commit -m "MBB daily update $(date -u +%F)"
           git pull --rebase origin ${{ github.ref_name }}
           git push
