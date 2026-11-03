@@ -202,15 +202,13 @@ build_season <- function(szn) {
   }
 
   # Load player RAPM baselines for roster_rapm feature calculation
-  rapm_file <- file.path(out_dir, szn, "player_rapm.csv.gz")
-  prev_rapm_file <- file.path(out_dir, szn - 1, "player_rapm.csv.gz")
-  active_rapm <- if (file.exists(rapm_file)) {
-    read_csv(rapm_file, show_col_types = FALSE)
-  } else if (file.exists(prev_rapm_file)) {
-    read_csv(prev_rapm_file, show_col_types = FALSE)
-  } else {
-    NULL
-  }
+  # LEAK-FREE: use the most recent PRIOR season's ridge RAPM (fit only on games before this season).
+  # The current season's RAPM is fit on games that include the ones being predicted, so it must not be used here.
+  prior_rapm_file <- Filter(file.exists, file.path(out_dir, c(szn - 1, szn - 2), "player_rapm.csv.gz"))[1]
+  active_rapm <- if (!is.na(prior_rapm_file)) {
+    read_csv(prior_rapm_file, show_col_types = FALSE,
+             col_types = cols(athlete_id = col_character(), .default = col_guess()))
+  } else NULL
 
   if (!is.null(active_rapm) && nrow(active_rapm) > 0) {
     pb_player <- tryCatch(load_mbb_player_box(seasons = szn), error = function(e) NULL)
@@ -221,7 +219,8 @@ build_season <- function(szn) {
         filter(!is.na(minutes), minutes > 0)
 
       roster_map <- pb_player %>%
-        inner_join(active_rapm %>% select(athlete_id, rapm), by = "athlete_id") %>%
+        left_join(active_rapm %>% select(athlete_id, rapm), by = "athlete_id") %>%
+        mutate(rapm = coalesce(rapm, 0)) %>%   # no prior rating (freshman/new transfer) = average player
         group_by(game_id, team_id) %>%
         summarise(roster_rapm = weighted.mean(rapm, minutes, na.rm = TRUE), .groups = "drop")
 
