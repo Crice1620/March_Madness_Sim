@@ -153,7 +153,7 @@ build_season <- function(szn) {
     fg3a_rate = fg3a / pmax(fga, 1),
     tov_rate  = tov / poss,
     orb_rate  = orb / pmax(orb + opp_drb, 1),
-    drb_rate  = drb / pmax(orb + opp_orb, 1), # fixed denominator index here too just in case
+    drb_rate  = drb / pmax(drb + opp_orb, 1), # fixed denominator index here too just in case
     ftr       = fta / pmax(fga, 1),
     pace      = avg_poss,
     margin    = score - opp_score,
@@ -324,9 +324,12 @@ build_season <- function(szn) {
             file.path(season_dir, "league.csv"))
 
   chk <- games %>% filter(home_gp >= 10, away_gp >= 10)
-  message(sprintf("  %d games, %d teams | corr(adj_net diff, margin | gp>=10) = %.3f | prior_net coverage %.0f%%",
+  r <- if (nrow(chk) >= 30) {
+    cor(chk$home_adj_net_pre - chk$away_adj_net_pre, chk$home_margin, use = "complete.obs")
+  } else NA_real_
+  message(sprintf("  %d games, %d teams | corr(adj_net diff, margin | gp>=10) = %s | prior_net coverage %.0f%%",
                   nrow(games), nrow(current),
-                  cor(chk$home_adj_net_pre - chk$away_adj_net_pre, chk$home_margin, use = "complete.obs"),
+                  ifelse(is.na(r), "n/a (too few gp>=10 games)", sprintf("%.3f", r)),
                   100 * mean(!is.na(current$prior_net))))
   invisible(TRUE)
 }
