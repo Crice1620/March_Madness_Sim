@@ -111,6 +111,14 @@ if (!is.null(pb) && nrow(pb) > 0) {
       val_adj = raw_val / team_pace * 100 * pmin(1.8, pmax(0.5, 1 + opp_def_rtg / opp_adj_scale))
     )
 
+  # Every player who has appeared in at least 1 game is included.
+  min_g <- 1L
+  norm_ref <- function(v, m) {
+    r <- median(v[m >= 20], na.rm = TRUE)
+    if (!is.finite(r) || r == 0) r <- median(v, na.rm = TRUE)
+    if (!is.finite(r) || r == 0) 1 else r
+  }
+
   players <- pv %>%
     group_by(athlete_id, athlete_display_name, team_id) %>%
     summarise(
@@ -123,7 +131,7 @@ if (!is.null(pb) && nrow(pb) > 0) {
       tot_drb = sum(drb), tot_blk = sum(blk), tot_stl = sum(stl), tot_tov = sum(tov),
       .groups = "drop"
     ) %>%
-    filter(games >= 3, avg_minutes >= 5) %>%
+    filter(games >= min_g) %>%
     mutate(
       weighted_val = avg_val_per100 * (avg_minutes / 40),
       fg_pct  = ifelse(tot_fga > 0, tot_fgm / tot_fga, NA_real_),
@@ -139,7 +147,7 @@ if (!is.null(pb) && nrow(pb) > 0) {
       p_tov_rate = tot_tov / pmax(total_minutes, 1) * 40,
       p_usage    = tot_fga / pmax(total_minutes, 1) * 40
     ) %>%
-    mutate(weighted_val = weighted_val / median(weighted_val[avg_minutes >= 20], na.rm = TRUE)) %>%
+    mutate(weighted_val = weighted_val / norm_ref(weighted_val, avg_minutes)) %>%
     select(-starts_with("tot_"))
 
   rapm_p <- file.path(data_dir, season, "player_rapm.csv.gz")
@@ -149,8 +157,12 @@ if (!is.null(pb) && nrow(pb) > 0) {
     players <- left_join(players, rp %>% select(athlete_id, rapm), by = "athlete_id")
   } else players$rapm <- NA_real_
 
-  write_csv(players %>% mutate(across(where(is.double), ~ round(.x, 4))),
-            file.path(app_dir, "players.csv.gz"))
+  if (nrow(players) > 0) {
+    write_csv(players %>% mutate(across(where(is.double), ~ round(.x, 4))),
+              file.path(app_dir, "players.csv.gz"))
+  } else {
+    message("0 qualifying players; keeping the previous players.csv.gz")
+  }
 } else {
   message("No player box yet; keeping the previous players.csv.gz")
 }
