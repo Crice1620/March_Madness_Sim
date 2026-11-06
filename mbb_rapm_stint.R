@@ -148,7 +148,7 @@ build_stints <- function(szn) {
     poss <- m[, 11] * g$game_poss / t_end                  # possessions in the stint
     gi <- gi + 1L; st["kept"] <- st["kept"] + 1
     out[[gi]] <- cbind(m[, 1:10, drop = FALSE], poss = poss, dmargin = m[, 12],
-                       hca = 1 - as.numeric(isTRUE(g$neutral)), game_no = gi)
+                       hca = 1 - as.numeric(as.logical(g$neutral) %in% TRUE), game_no = gi)
   }
 
   keep_frac <- st["kept"] / max(st["total"], 1)
