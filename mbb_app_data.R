@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 # mbb_app_data.R
-# Runs in mbb_daily.yml AFTER mbb_rapm.R and mbb_backfill.R.
+# Runs in mbb_daily.yml AFTER mbb_rapm.R, mbb_rapm_stint.R and mbb_backfill.R.
 # Precomputes everything the Shiny app needs so the app only downloads small files:
 #
 #   data/mbb_app/teams.csv          team_id, abbrev, name, logo, conference
@@ -150,8 +150,12 @@ if (!is.null(pb) && nrow(pb) > 0) {
     mutate(weighted_val = weighted_val / norm_ref(weighted_val, avg_minutes)) %>%
     select(-starts_with("tot_"))
 
-  rapm_p <- file.path(data_dir, season, "player_rapm.csv.gz")
-  if (file.exists(rapm_p)) {
+  # Displayed RAPM = STINT RAPM (this season; if it isn't built yet, last season's rating so returning
+  # players aren't blank). The model's own roster feature uses the separate box-score file.
+  rapm_cands <- file.path(data_dir, c(season, season - 1L), "player_rapm_stint.csv.gz")
+  rapm_p <- Filter(file.exists, rapm_cands)[1]
+  if (!is.na(rapm_p)) {
+    message("RAPM source: ", rapm_p)
     rp <- suppressWarnings(read_csv(rapm_p, show_col_types = FALSE,
                                     col_types = cols(athlete_id = col_character(), .default = col_guess())))
     players <- left_join(players, rp %>% select(athlete_id, rapm), by = "athlete_id")
