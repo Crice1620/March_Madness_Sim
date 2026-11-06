@@ -41,7 +41,10 @@ jobs:
         id: season
         run: echo "s=$(date -u +%Y)" >> "$GITHUB_OUTPUT"
 
-      - name: Build Stint RAPM
+      - name: Build box-score RAPM (model feature)
+        run: Rscript mbb_rapm.R ${{ steps.season.outputs.s }} ${{ steps.season.outputs.s }}
+
+      - name: Build Stint RAPM (app)
         run: Rscript mbb_rapm_stint.R ${{ steps.season.outputs.s }} ${{ steps.season.outputs.s }}
 
       - name: Train model
@@ -51,7 +54,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/mbb_model data/mbb/*/player_rapm.csv.gz
+          git add data/mbb_model data/mbb/*/player_rapm*.csv.gz
           git diff --cached --quiet || git commit -m "MBB model retrain and RAPM update $(date -u +%F)"
           git pull --rebase origin ${{ github.ref_name }}
           git push
