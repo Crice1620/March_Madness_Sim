@@ -36,8 +36,13 @@ jobs:
           packages: any::xgboost, any::dplyr, any::readr, any::jsonlite, any::Matrix, any::glmnet, any::hoopR, any::tidyr
           cache-version: 1
 
-      - name: Build Player RAPM
-        run: Rscript mbb_rapm.R ${{ inputs.first_season }}
+      # Refit the stint RAPM for the season that just finished (it becomes next season's prior)
+      - name: Current season
+        id: season
+        run: echo "s=$(date -u +%Y)" >> "$GITHUB_OUTPUT"
+
+      - name: Build Stint RAPM
+        run: Rscript mbb_rapm_stint.R ${{ steps.season.outputs.s }} ${{ steps.season.outputs.s }}
 
       - name: Train model
         run: Rscript mbb_train.R ${{ inputs.first_season }} ${{ inputs.last_season }}
