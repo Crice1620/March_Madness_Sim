@@ -16,7 +16,7 @@ concurrency:
 jobs:
   daily:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 120
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
     steps:
@@ -41,6 +41,11 @@ jobs:
       # 1. Player RAPM for the CURRENT season only (no args = every season, ~20x the work)
       - name: Build Player RAPM
         run: Rscript mbb_rapm.R ${{ steps.season.outputs.s }} ${{ steps.season.outputs.s }}
+
+      # 1b. Stint-based RAPM from play-by-play substitutions (overwrites the box-score RAPM when the
+      #     season reconstructs cleanly; otherwise leaves it alone)
+      - name: Build Stint RAPM
+        run: Rscript mbb_rapm_stint.R ${{ steps.season.outputs.s }} ${{ steps.season.outputs.s }}
 
       # 2. Rebuild current season features (reads the RAPM above)
       - name: Rebuild current season
