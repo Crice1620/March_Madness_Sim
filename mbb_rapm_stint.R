@@ -9,10 +9,10 @@
 #    Home-team players enter as +1, away-team players as -1, plus an unpenalized home-court column.
 #    Opponents are on the floor in the same row, so schedule strength is adjusted for directly.
 # 4. Games whose reconstructed minutes don't match the box score are thrown away.
-# 5. Seasons where too few games reconstruct cleanly are SKIPPED, leaving the box-score ridge
-#    from mbb_rapm.R in place for that season (run mbb_rapm.R first, this script second).
+# 5. Seasons where too few games reconstruct cleanly (ESPN only logs subs from 2025 on) are SKIPPED.
 #
-# Output (overwrites): data/mbb/<season>/player_rapm.csv.gz
+# Output: data/mbb/<season>/player_rapm_stint.csv.gz   (used by the app; the model keeps using the
+#         box-score player_rapm.csv.gz from mbb_rapm.R, which exists for every season)
 #   athlete_id, athlete_display_name, team_id, games_played, total_mins, rapm, season
 #   rapm = points per 100 possessions better than an average D1 player while on the floor.
 #
@@ -24,7 +24,8 @@ suppressPackageStartupMessages({
 
 PREV_WEIGHT <- 0.5    # weight of last season's stints when fitting this season
 NFOLDS      <- 5
-MIN_KEEP    <- 0.60   # a season needs >= 60% of its games reconstructed cleanly
+MIN_KEEP    <- 0.20   # a season needs >= 20% of its games reconstructed cleanly (ESPN only logs subs for part of 2025)
+MIN_GAMES   <- 1000   # ...and either >= 1000 clean games, or a usable prior season to pool with
 MAX_MIN_ERR <- 0.12   # per game: sum|reconstructed - box minutes| / sum box minutes
 MIN_POSS    <- 0.5    # drop stints shorter than this many possessions
 
@@ -171,15 +172,15 @@ build_stints <- function(szn) {
 
 fit_season <- function(szn) {
   message(sprintf("\n=== Stint ridge RAPM %d ===", szn))
-  cur <- get_stints(szn)
-  if (is.null(cur) || is.null(cur$mat) || cur$keep_frac < MIN_KEEP) {
-    message("  too few cleanly reconstructed games; keeping the existing (box-score) RAPM for this season")
+  usable <- function(x) !is.null(x) && !is.null(x$mat) && x$keep_frac >= MIN_KEEP
+  cur  <- get_stints(szn)
+  prev <- get_stints(szn - 1L)
+  if (!usable(cur) || (cur$stats["kept"] < MIN_GAMES && !usable(prev))) {
+    message("  too few cleanly reconstructed games; NO RAPM file written for this season")
     return(FALSE)
   }
   parts <- list(cur = list(m = cur$mat, pl = cur$pl_ids, wmult = 1))
-  prev <- get_stints(szn - 1L)
-  if (!is.null(prev) && !is.null(prev$mat) && prev$keep_frac >= MIN_KEEP)
-    parts$prev <- list(m = prev$mat, pl = prev$pl_ids, wmult = PREV_WEIGHT)
+  if (usable(prev)) parts$prev <- list(m = prev$mat, pl = prev$pl_ids, wmult = PREV_WEIGHT)
 
   players <- sort(unique(unlist(lapply(parts, function(p) p$pl))))
   n_p <- length(players)
@@ -214,11 +215,11 @@ fit_season <- function(szn) {
 
   pl <- cur$box_sum %>%
     left_join(tibble(athlete_id = players, rapm = rapm), by = "athlete_id") %>%
-    mutate(rapm = round(rapm, 3), season = szn)
+    mutate(rapm = round(rapm, 3), season = szn, method = "stint")
 
   out_dir <- file.path("data/mbb", szn)
   dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
-  write_csv(pl, file.path(out_dir, "player_rapm.csv.gz"))
+  write_csv(pl, file.path(out_dir, "player_rapm_stint.csv.gz"))
 
   top <- pl %>% filter(total_mins >= 400) %>% arrange(desc(rapm)) %>% head(10)
   message("  top players (>=400 min):")
