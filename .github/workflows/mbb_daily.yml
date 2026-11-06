@@ -38,12 +38,8 @@ jobs:
           y=$(date -u +%Y); m=$((10#$(date -u +%m)))
           if [ "$m" -ge 11 ]; then echo "s=$((y+1))" >> "$GITHUB_OUTPUT"; else echo "s=$y" >> "$GITHUB_OUTPUT"; fi
 
-      # 1. Player RAPM for the CURRENT season only (no args = every season, ~20x the work)
-      - name: Build Player RAPM
-        run: Rscript mbb_rapm.R ${{ steps.season.outputs.s }} ${{ steps.season.outputs.s }}
-
-      # 1b. Stint-based RAPM from play-by-play substitutions (overwrites the box-score RAPM when the
-      #     season reconstructs cleanly; otherwise leaves it alone)
+      # 1. Stint-based RAPM (play-by-play substitutions) for the CURRENT season only.
+      #    If too few games reconstruct (very early season) it writes nothing and the app shows no RAPM yet.
       - name: Build Stint RAPM
         run: Rscript mbb_rapm_stint.R ${{ steps.season.outputs.s }} ${{ steps.season.outputs.s }}
 
