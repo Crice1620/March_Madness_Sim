@@ -1,7 +1,8 @@
 name: MBB Rebuild (RAPM -> Backfill -> Train)
 
 # Manual, run once after switching to the ridge RAPM (and any time the RAPM or feature code changes).
-# Order matters: backfill features read the PRIOR season's player_rapm.csv.gz, and train reads the backfill.
+# Order matters: backfill features read the PRIOR season's box-score player_rapm.csv.gz, and train reads the backfill.
+# Stint RAPM (player_rapm_stint.csv.gz) is only for the app; ESPN only logs substitutions from 2025 on.
 
 on:
   workflow_dispatch:
@@ -14,7 +15,7 @@ on:
         default: "2026"
       stint_first_season:
         description: "First season to run the stint RAPM (play-by-play subs; older seasons may not reconstruct)"
-        default: "2016"
+        default: "2025"
 
 permissions:
   contents: write
@@ -38,11 +39,11 @@ jobs:
         with:
           packages: any::hoopR, any::dplyr, any::readr, any::Matrix, any::glmnet
           cache-version: 1
-      # Remove every old RAPM file first so no leftover box-score RAPM can sneak into the features.
-      # After this, a season has a RAPM file ONLY if the stint script could reconstruct it.
       - name: Clear old RAPM files
-        run: rm -f data/mbb/*/player_rapm.csv.gz
-      - name: Stint RAPM
+        run: rm -f data/mbb/*/player_rapm.csv.gz data/mbb/*/player_rapm_stint.csv.gz
+      - name: Box-score RAPM, all seasons (the model's roster feature)
+        run: Rscript mbb_rapm.R ${{ inputs.first_season }} ${{ inputs.last_season }}
+      - name: Stint RAPM (the app's player value; 2025 on)
         run: Rscript mbb_rapm_stint.R ${{ inputs.stint_first_season }} ${{ inputs.last_season }}
       - name: Commit RAPM
         if: always()
