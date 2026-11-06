@@ -38,9 +38,11 @@ jobs:
         with:
           packages: any::hoopR, any::dplyr, any::readr, any::Matrix, any::glmnet
           cache-version: 1
-      - name: Ridge RAPM, all seasons
-        run: Rscript mbb_rapm.R ${{ inputs.first_season }} ${{ inputs.last_season }}
-      - name: Stint RAPM (overwrites box-score RAPM where subs reconstruct cleanly)
+      # Remove every old RAPM file first so no leftover box-score RAPM can sneak into the features.
+      # After this, a season has a RAPM file ONLY if the stint script could reconstruct it.
+      - name: Clear old RAPM files
+        run: rm -f data/mbb/*/player_rapm.csv.gz
+      - name: Stint RAPM
         run: Rscript mbb_rapm_stint.R ${{ inputs.stint_first_season }} ${{ inputs.last_season }}
       - name: Commit RAPM
         if: always()
