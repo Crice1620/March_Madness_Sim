@@ -85,6 +85,7 @@ team_id,team_abbrev,team_name,conference,logo
 2172,DEN,Denver Pioneers,West Coast Conference,https://a.espncdn.com/i/teamlogos/ncaa/500/2172.png
 2174,DETM,Detroit Mercy Titans,Horizon League,https://a.espncdn.com/i/teamlogos/ncaa/500/2174.png
 218,TEM,Temple Owls,American Conference,https://a.espncdn.com/i/teamlogos/ncaa/500/218.png
+2181,DRKE,Drake Bulldogs,Missouri Valley Conference,https://a.espncdn.com/i/teamlogos/ncaa/500/2181.png
 2182,DREX,Drexel Dragons,Coastal Athletic Association,https://a.espncdn.com/i/teamlogos/ncaa/500/2182.png
 2184,DUQ,Duquesne Dukes,Atlantic 10 Conference,https://a.espncdn.com/i/teamlogos/ncaa/500/2184.png
 219,PENN,Pennsylvania Quakers,Ivy League,https://a.espncdn.com/i/teamlogos/ncaa/500/219.png
@@ -165,6 +166,7 @@ team_id,team_abbrev,team_name,conference,logo
 2448,NCAT,North Carolina A&T Aggies,Coastal Athletic Association,https://a.espncdn.com/i/teamlogos/ncaa/500/2448.png
 2449,NDSU,North Dakota State Bison,Summit League,https://a.espncdn.com/i/teamlogos/ncaa/500/2449.png
 245,TA&M,Texas A&M Aggies,Southeastern Conference,https://a.espncdn.com/i/teamlogos/ncaa/500/245.png
+2450,NORF,Norfolk State Spartans,Mid-Eastern Athletic Conference,https://a.espncdn.com/i/teamlogos/ncaa/500/2450.png
 2453,UNA,North Alabama Lions,United Athletic Conference,https://a.espncdn.com/i/teamlogos/ncaa/500/2453.png
 2454,UNF,North Florida Ospreys,Atlantic Sun Conference,https://a.espncdn.com/i/teamlogos/ncaa/500/2454.png
 2458,UNCO,Northern Colorado Bears,Big Sky Conference,https://a.espncdn.com/i/teamlogos/ncaa/500/2458.png
@@ -253,6 +255,7 @@ team_id,team_abbrev,team_name,conference,logo
 2711,WMU,Western Michigan Broncos,Mid-American Conference,https://a.espncdn.com/i/teamlogos/ncaa/500/2711.png
 2717,WCU,Western Carolina Catamounts,Southern Conference,https://a.espncdn.com/i/teamlogos/ncaa/500/2717.png
 2724,WICH,Wichita State Shockers,American Conference,https://a.espncdn.com/i/teamlogos/ncaa/500/2724.png
+2729,W&M,William & Mary Tribe,Coastal Athletic Association,https://a.espncdn.com/i/teamlogos/ncaa/500/2729.png
 2737,WIN,Winthrop Eagles,Big South Conference,https://a.espncdn.com/i/teamlogos/ncaa/500/2737.png
 2739,GB,Green Bay Phoenix,Horizon League,https://a.espncdn.com/i/teamlogos/ncaa/500/2739.png
 2747,WOF,Wofford Terriers,Southern Conference,https://a.espncdn.com/i/teamlogos/ncaa/500/2747.png
@@ -282,6 +285,7 @@ team_id,team_abbrev,team_name,conference,logo
 2908,UPST,South Carolina Upstate Spartans,Big South Conference,https://a.espncdn.com/i/teamlogos/ncaa/500/2908.png
 2916,UIW,Incarnate Word Cardinals,Southland Conference,https://a.espncdn.com/i/teamlogos/ncaa/500/2916.png
 292,RGV,UT Rio Grande Valley Vaqueros,Southland Conference,https://a.espncdn.com/i/teamlogos/ncaa/500/292.png
+2934,CSUB,Cal State Bakersfield Roadrunners,Big West Conference,https://a.espncdn.com/i/teamlogos/ncaa/500/2934.png
 294,JAX,Jacksonville Dolphins,Atlantic Sun Conference,https://a.espncdn.com/i/teamlogos/ncaa/500/294.png
 295,ODU,Old Dominion Monarchs,Sun Belt Conference,https://a.espncdn.com/i/teamlogos/ncaa/500/295.png
 299,LBSU,Long Beach State Beach,Big West Conference,https://a.espncdn.com/i/teamlogos/ncaa/500/299.png
@@ -334,6 +338,7 @@ team_id,team_abbrev,team_name,conference,logo
 61,UGA,Georgia Bulldogs,Southeastern Conference,https://a.espncdn.com/i/teamlogos/ncaa/500/61.png
 62,HAW,Hawai'i Rainbow Warriors,Mountain West Conference,https://a.espncdn.com/i/teamlogos/ncaa/500/62.png
 66,ISU,Iowa State Cyclones,Big 12 Conference,https://a.espncdn.com/i/teamlogos/ncaa/500/66.png
+68,BOIS,Boise State Broncos,Pac-12 Conference,https://a.espncdn.com/i/teamlogos/ncaa/500/68.png
 70,IDHO,Idaho Vandals,Big Sky Conference,https://a.espncdn.com/i/teamlogos/ncaa/500/70.png
 71,BRAD,Bradley Braves,Missouri Valley Conference,https://a.espncdn.com/i/teamlogos/ncaa/500/71.png
 77,NU,Northwestern Wildcats,Big Ten Conference,https://a.espncdn.com/i/teamlogos/ncaa/500/77.png
