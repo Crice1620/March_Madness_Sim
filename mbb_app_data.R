@@ -1,10 +1,11 @@
 #!/usr/bin/env Rscript
 # mbb_app_data.R
-# Runs in mbb_daily.yml AFTER mbb_rapm.R, mbb_rapm_stint.R and mbb_backfill.R.
+# Runs in mbb_daily.yml AFTER mbb_backfill.R and mbb_bpm.R.
 # Precomputes everything the Shiny app needs so the app only downloads small files:
 #
 #   data/mbb_app/teams.csv          team_id, abbrev, name, logo, conference
-#   data/mbb_app/players.csv.gz     opponent-adjusted player values + style rates (+ rapm)
+#   data/mbb_app/players.csv.gz     opponent-adjusted player values + style rates + bpm (box-score BPM)
+#   data/mbb_app/team_value.csv     team value = sum(bpm x min_per_game / 200) per team
 #   data/mbb_app/team_totals.csv    average game total per team (for the O/U line)
 #   data/mbb_app/som_umatrix.csv    SOM grid cells (node, x, y, u) for the Team DNA map
 #   data/mbb_app/team_nodes.csv     each team's SOM cell
@@ -111,6 +112,9 @@ if (!is.null(pb) && nrow(pb) > 0) {
       val_adj = raw_val / team_pace * 100 * pmin(1.8, pmax(0.5, 1 + opp_def_rtg / opp_adj_scale))
     )
 
+  # games each team has played in the player box (for minutes per TEAM game, the M_i in team value)
+  tm_games <- pv %>% group_by(team_id) %>% summarise(team_games = n_distinct(game_id), .groups = "drop")
+
   # Every player who has appeared in at least 1 game is included.
   min_g <- 1L
   norm_ref <- function(v, m) {
@@ -132,6 +136,9 @@ if (!is.null(pb) && nrow(pb) > 0) {
       .groups = "drop"
     ) %>%
     filter(games >= min_g) %>%
+    left_join(tm_games, by = "team_id") %>%
+    mutate(min_per_game = total_minutes / pmax(team_games, 1)) %>%   # minutes per TEAM game (0 for games missed)
+    select(-team_games) %>%
     mutate(
       weighted_val = avg_val_per100 * (avg_minutes / 40),
       fg_pct  = ifelse(tot_fga > 0, tot_fgm / tot_fga, NA_real_),
@@ -150,16 +157,27 @@ if (!is.null(pb) && nrow(pb) > 0) {
     mutate(weighted_val = weighted_val / norm_ref(weighted_val, avg_minutes)) %>%
     select(-starts_with("tot_"))
 
-  # Displayed RAPM = STINT RAPM (this season; if it isn't built yet, last season's rating so returning
-  # players aren't blank). The model's own roster feature uses the separate box-score file.
-  rapm_cands <- file.path(data_dir, c(season, season - 1L), "player_rapm_stint.csv.gz")
-  rapm_p <- Filter(file.exists, rapm_cands)[1]
-  if (!is.na(rapm_p)) {
-    message("RAPM source: ", rapm_p)
-    rp <- suppressWarnings(read_csv(rapm_p, show_col_types = FALSE,
+  # Player value shown in the app AND used by the model = box-score BPM (mbb_bpm.R). This season's file
+  # (descriptive); if it isn't built yet, last season's so returning players aren't blank.
+  # `rapm` is kept as a copy of bpm so older app code that reads players$rapm keeps working.
+  bpm_cands <- file.path(data_dir, c(season, season - 1L), "player_bpm.csv.gz")
+  bpm_p <- Filter(file.exists, bpm_cands)[1]
+  if (!is.na(bpm_p)) {
+    message("BPM source: ", bpm_p)
+    rp <- suppressWarnings(read_csv(bpm_p, show_col_types = FALSE,
                                     col_types = cols(athlete_id = col_character(), .default = col_guess())))
-    players <- left_join(players, rp %>% select(athlete_id, rapm), by = "athlete_id")
-  } else players$rapm <- NA_real_
+    players <- left_join(players, rp %>% select(athlete_id, bpm), by = "athlete_id")
+  } else players$bpm <- NA_real_
+  players$rapm <- players$bpm
+
+  # Team value = sum(player value x M_i), M_i = minutes per team game / 200 (out players would be M = 0)
+  team_value_tbl <- players %>%
+    group_by(team_id) %>%
+    summarise(team_value = sum(coalesce(bpm, 0) * min_per_game / 200),
+              n_rated = sum(!is.na(bpm)), .groups = "drop") %>%
+    mutate(team_value_net = 5 * team_value)       # x5 = points per 100 possessions vs an average team
+  write_csv(team_value_tbl %>% mutate(across(where(is.double), ~ round(.x, 4))),
+            file.path(app_dir, "team_value.csv"))
 
   if (nrow(players) > 0) {
     write_csv(players %>% mutate(across(where(is.double), ~ round(.x, 4))),
