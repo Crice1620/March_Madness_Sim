@@ -8,13 +8,25 @@ suppressPackageStartupMessages({
 })
 
 out_dir <- "data/mbb"
-model_dir <- "models/mbb"
+model_dir <- "data/mbb_model"   # must match the `git add data/mbb_model` step in the workflows
 dir.create(model_dir, recursive = TRUE, showWarnings = FALSE)
 
 # Discover available backfilled seasons
 mbb_dirs <- list.dirs(out_dir, full.names = FALSE, recursive = FALSE)
 seasons <- sort(suppressWarnings(as.integer(mbb_dirs)))
 seasons <- seasons[!is.na(seasons) & seasons != 2021] # exclude COVID season
+
+# Season range from the command line: Rscript mbb_train.R [first_season] [last_season]
+# Blank / missing last_season = most recent COMPLETED season (the title game is in early April,
+# so from June on the current calendar year's season is done; before that it is last year's).
+args <- commandArgs(trailingOnly = TRUE)
+arg_int <- function(i) if (length(args) >= i && nzchar(trimws(args[i]))) suppressWarnings(as.integer(args[i])) else NA_integer_
+cur_year  <- as.integer(format(Sys.Date(), "%Y"))
+cur_month <- as.integer(format(Sys.Date(), "%m"))
+first_season <- arg_int(1); if (is.na(first_season)) first_season <- min(seasons)
+last_season  <- arg_int(2); if (is.na(last_season))  last_season  <- if (cur_month >= 6) cur_year else cur_year - 1L
+seasons <- seasons[seasons >= first_season & seasons <= last_season]
+if (length(seasons) == 0) stop("No season folders in data/mbb between ", first_season, " and ", last_season)
 
 message("Training seasons: ", paste(seasons, collapse = ", "))
 
