@@ -5,7 +5,7 @@
 #
 #   data/mbb_app/teams.csv          team_id, abbrev, name, logo, conference
 #   data/mbb_app/players.csv.gz     opponent-adjusted player values + style rates + bpm (box-score BPM)
-#   data/mbb_app/team_value.csv     team value = sum(bpm x min_per_game / 200) per team
+#   data/mbb_app/team_value.csv     team value = sum(bpm x avg_minutes / 200) per team
 #   data/mbb_app/team_totals.csv    average game total per team (for the O/U line)
 #   data/mbb_app/som_umatrix.csv    SOM grid cells (node, x, y, u) for the Team DNA map
 #   data/mbb_app/team_nodes.csv     each team's SOM cell
@@ -112,9 +112,6 @@ if (!is.null(pb) && nrow(pb) > 0) {
       val_adj = raw_val / team_pace * 100 * pmin(1.8, pmax(0.5, 1 + opp_def_rtg / opp_adj_scale))
     )
 
-  # games each team has played in the player box (for minutes per TEAM game, the M_i in team value)
-  tm_games <- pv %>% group_by(team_id) %>% summarise(team_games = n_distinct(game_id), .groups = "drop")
-
   # Every player who has appeared in at least 1 game is included.
   min_g <- 1L
   norm_ref <- function(v, m) {
@@ -136,9 +133,6 @@ if (!is.null(pb) && nrow(pb) > 0) {
       .groups = "drop"
     ) %>%
     filter(games >= min_g) %>%
-    left_join(tm_games, by = "team_id") %>%
-    mutate(min_per_game = total_minutes / pmax(team_games, 1)) %>%   # minutes per TEAM game (0 for games missed)
-    select(-team_games) %>%
     mutate(
       weighted_val = avg_val_per100 * (avg_minutes / 40),
       fg_pct  = ifelse(tot_fga > 0, tot_fgm / tot_fga, NA_real_),
@@ -170,10 +164,11 @@ if (!is.null(pb) && nrow(pb) > 0) {
   } else players$bpm <- NA_real_
   players$rapm <- players$bpm
 
-  # Team value = sum(player value x M_i), M_i = minutes per team game / 200 (out players would be M = 0)
+  # Team value = sum(player value x M_i), M_i = minutes / 200 (same definition as the app; out players would be M = 0)
   team_value_tbl <- players %>%
     group_by(team_id) %>%
-    summarise(team_value = sum(coalesce(bpm, 0) * min_per_game / 200),
+    mutate(M_i = coalesce(avg_minutes, 0) / pmax(200, sum(avg_minutes, na.rm = TRUE))) %>%
+    summarise(team_value = sum(coalesce(bpm, 0) * M_i),
               n_rated = sum(!is.na(bpm)), .groups = "drop") %>%
     mutate(team_value_net = 5 * team_value)       # x5 = points per 100 possessions vs an average team
   write_csv(team_value_tbl %>% mutate(across(where(is.double), ~ round(.x, 4))),
