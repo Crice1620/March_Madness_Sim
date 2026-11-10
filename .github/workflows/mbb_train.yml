@@ -36,25 +36,22 @@ jobs:
           packages: any::xgboost, any::dplyr, any::readr, any::jsonlite, any::Matrix, any::glmnet, any::hoopR, any::tidyr
           cache-version: 1
 
-      # Refit the stint RAPM for the season that just finished (it becomes next season's prior)
+      # Final box-score BPM for the season that just finished (it becomes next season's roster prior)
       - name: Current season
         id: season
         run: echo "s=$(date -u +%Y)" >> "$GITHUB_OUTPUT"
 
-      - name: Build box-score RAPM (model feature)
-        run: Rscript mbb_rapm.R ${{ steps.season.outputs.s }} ${{ steps.season.outputs.s }}
-
-      - name: Build Stint RAPM (app)
-        run: Rscript mbb_rapm_stint.R ${{ steps.season.outputs.s }} ${{ steps.season.outputs.s }}
+      - name: Build box-score BPM
+        run: Rscript mbb_bpm.R ${{ steps.season.outputs.s }} ${{ steps.season.outputs.s }}
 
       - name: Train model
         run: Rscript mbb_train.R ${{ inputs.first_season }} ${{ inputs.last_season }}
 
-      - name: Commit model and RAPM
+      - name: Commit model and BPM
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/mbb_model data/mbb/*/player_rapm*.csv.gz
-          git diff --cached --quiet || git commit -m "MBB model retrain and RAPM update $(date -u +%F)"
+          git add data/mbb_model data/mbb/*/player_bpm.csv.gz
+          git diff --cached --quiet || git commit -m "MBB model retrain and BPM update $(date -u +%F)"
           git pull --rebase origin ${{ github.ref_name }}
           git push
