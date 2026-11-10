@@ -33,7 +33,7 @@ feat_cols <- c("gp", "adj_off_pre", "adj_def_pre", "adj_net_pre", "off_eff_pre",
                "rec_off_pre", "rec_def_pre", "rec_margin_pre",
                paste0(style_cols, "_pre"),
                "road_margin_pre", "road_wp_pre", "sos_pre", "rest_days", "prior_net",
-               "roster_rapm")
+               "roster_bpm")
 
 # ---- helpers ---------------------------------------------------------------
 
@@ -201,37 +201,40 @@ build_season <- function(szn) {
     }
   }
 
-  # Load player RAPM baselines for roster_rapm feature calculation
-  # LEAK-FREE: use the most recent PRIOR season's ridge RAPM (fit only on games before this season).
-  # The current season's RAPM is fit on games that include the ones being predicted, so it must not be used here.
-  prior_rapm_file <- Filter(file.exists, file.path(out_dir, c(szn - 1, szn - 2), "player_rapm.csv.gz"))[1]
-  active_rapm <- if (!is.na(prior_rapm_file)) {
-    read_csv(prior_rapm_file, show_col_types = FALSE,
+  # Roster value feature = team value = sum(player BPM x minute share), minute share = minutes / 200
+  # (a 40-minute game has 200 player-minutes; overtime games use the actual total so shares still sum to 1).
+  # A player with no prior rating (freshman / new transfer) counts as an average player (0).
+  # LEAK-FREE: BPM comes from the most recent PRIOR season (player_bpm.csv.gz, mbb_bpm.R), never the current one.
+  prior_bpm_file <- Filter(file.exists, file.path(out_dir, c(szn - 1, szn - 2), "player_bpm.csv.gz"))[1]
+  active_bpm <- if (!is.na(prior_bpm_file)) {
+    read_csv(prior_bpm_file, show_col_types = FALSE,
              col_types = cols(athlete_id = col_character(), .default = col_guess()))
   } else NULL
 
-  if (!is.null(active_rapm) && nrow(active_rapm) > 0) {
+  if (!is.null(active_bpm) && nrow(active_bpm) > 0) {
     pb_player <- tryCatch(load_mbb_player_box(seasons = szn), error = function(e) NULL)
     if (!is.null(pb_player) && nrow(pb_player) > 0) {
       pb_player <- pb_player %>%
         transmute(game_id = as.character(game_id), team_id = as.character(team_id),
-                  athlete_id = as.character(athlete_id), minutes = as.numeric(minutes)) %>%
-        filter(!is.na(minutes), minutes > 0)
+                  athlete_id = as.character(athlete_id),
+                  minutes = suppressWarnings(as.numeric(gsub(":.*", "", as.character(minutes))))) %>%
+        filter(!is.na(minutes), minutes > 0) %>%
+        distinct(game_id, team_id, athlete_id, .keep_all = TRUE)
 
       roster_map <- pb_player %>%
-        left_join(active_rapm %>% select(athlete_id, rapm), by = "athlete_id") %>%
-        mutate(rapm = coalesce(rapm, 0)) %>%   # no prior rating (freshman/new transfer) = average player
+        left_join(active_bpm %>% select(athlete_id, bpm), by = "athlete_id") %>%
+        mutate(bpm = coalesce(bpm, 0)) %>%
         group_by(game_id, team_id) %>%
-        summarise(roster_rapm = weighted.mean(rapm, minutes, na.rm = TRUE), .groups = "drop")
+        summarise(roster_bpm = sum(bpm * minutes) / pmax(200, sum(minutes)), .groups = "drop")
 
       tg <- left_join(tg, roster_map, by = c("game_id", "team_id"))
     } else {
-      tg$roster_rapm <- 0
+      tg$roster_bpm <- 0
     }
   } else {
-    tg$roster_rapm <- 0
+    tg$roster_bpm <- 0
   }
-  tg$roster_rapm[is.na(tg$roster_rapm)] <- 0
+  tg$roster_bpm[is.na(tg$roster_bpm)] <- 0
 
   # Phantom "next game" row per team
   last_date <- max(tg$game_date)
@@ -239,7 +242,7 @@ build_season <- function(szn) {
     select(team_id, team_abbrev, team_name) %>%
     mutate(game_id = paste0("phantom_", team_id), game_date = last_date + 1,
            opp_id = NA_character_, location = "home", is_real = FALSE,
-           espn_only = FALSE, roster_rapm = 0)
+           espn_only = FALSE, roster_bpm = 0)
   tg <- bind_rows(tg, phantom) %>% arrange(team_id, game_date, game_id)
 
   # League means as-of each date
@@ -266,12 +269,12 @@ build_season <- function(szn) {
     adj_mar_g = adj_off_g - adj_def_g
   )
 
-  # Step B: expanding adjusted ratings, style rates, recent form, road, rest, roster_rapm rolling avg
+  # Step B: expanding adjusted ratings, style rates, recent form, road, rest, roster_bpm rolling avg
   tg <- tg %>% add_pre("adj_off_g", "lg_off_eff", K_EFF, "adj_off_pre") %>%
     add_pre("adj_def_g", "lg_off_eff", K_EFF, "adj_def_pre")
   for (cn in style_cols) tg <- add_pre(tg, cn, paste0("lg_", cn), K_STYLE)
   
-  tg <- tg %>% add_pre("roster_rapm", "zero", K_EFF, "roster_rapm")
+  tg <- tg %>% add_pre("roster_bpm", "zero", K_EFF, "roster_bpm")
   tg <- tg %>% mutate(adj_net_pre = adj_off_pre - adj_def_pre)
 
   tg <- tg %>% group_by(team_id) %>% mutate(
