@@ -1,6 +1,7 @@
 name: MBB Rebuild (BPM -> Backfill -> Train)
 
 # Manual, run once after switching to box-score BPM (and any time the BPM or feature code changes).
+# NOTE: later jobs check out ref: github.ref_name, because the default checkout is the trigger SHA and would miss earlier jobs' commits.
 # Order matters: backfill features read the PRIOR season's player_bpm.csv.gz, and train reads the backfill.
 # BPM only needs the existing games.csv.gz (ids, margin, possessions), so it can run first.
 
@@ -57,7 +58,10 @@ jobs:
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
     steps:
-      - uses: actions/checkout@v4          # fresh checkout picks up the BPM commit above
+      # ref = branch tip, NOT the trigger SHA, so this job sees the commit the previous job pushed
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
       - uses: r-lib/actions/setup-r@v2
         with:
           use-public-rspm: true
@@ -83,6 +87,8 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
       - uses: r-lib/actions/setup-r@v2
         with:
           use-public-rspm: true
