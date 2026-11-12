@@ -2,7 +2,8 @@ name: MBB Daily
 
 on:
   schedule:
-    # 12:00 UTC daily, only during the season (Nov-Apr). Manual runs work any time.
+    # 08:00 UTC daily = 3:00 AM EST / 4:00 AM EDT, only during the season (Nov-Apr).
+    # Manual runs work any time.
     - cron: "0 8 * 11-12,1-4 *"
   workflow_dispatch:
 
@@ -47,7 +48,14 @@ jobs:
       - name: Build box-score BPM
         run: Rscript mbb_bpm.R ${{ steps.season.outputs.s }} ${{ steps.season.outputs.s }}
 
-      # 3. Export the small files the Shiny app downloads
+      # 3. Prior-informed RAPM (display only, not a model feature). Reads games.csv.gz from step 1
+      #    and player_bpm.csv.gz from step 2. continue-on-error so a pbp hiccup never blocks the
+      #    rest of the daily update.
+      - name: Build prior-informed RAPM
+        continue-on-error: true
+        run: Rscript mbb_rapm.R ${{ steps.season.outputs.s }}
+
+      # 4. Export the small files the Shiny app downloads (must run after RAPM to pick it up)
       - name: Export app data
         run: Rscript mbb_app_data.R
 
