@@ -162,14 +162,25 @@ if (!is.null(pb) && nrow(pb) > 0) {
                                     col_types = cols(athlete_id = col_character(), .default = col_guess())))
     players <- left_join(players, rp %>% select(athlete_id, bpm), by = "athlete_id")
   } else players$bpm <- NA_real_
-  players$rapm <- players$bpm
 
-  # Team value = sum(player value x M_i), M_i = minutes / 200 (same definition as the app; out players would be M = 0)
+  # Prior-informed RAPM (BPM is the prior; mbb_rapm.R). Current season only.
+  rapm_p <- file.path(data_dir, season, "player_rapm.csv.gz")
+  if (file.exists(rapm_p)) {
+    rr <- suppressWarnings(read_csv(rapm_p, show_col_types = FALSE,
+                                    col_types = cols(athlete_id = col_character(), .default = col_guess()))) %>%
+      select(athlete_id, rapm) %>% filter(!is.na(rapm)) %>% distinct(athlete_id, .keep_all = TRUE)
+    players <- left_join(players, rr, by = "athlete_id")
+  } else players$rapm <- NA_real_
+
+  # Player Value = RAPM when the player has one, otherwise his BPM (the RAPM prior)
+  players$player_value <- dplyr::coalesce(players$rapm, players$bpm)
+
+  # Team value = ...
   team_value_tbl <- players %>%
     group_by(team_id) %>%
     mutate(M_i = coalesce(avg_minutes, 0) / pmax(200, sum(avg_minutes, na.rm = TRUE))) %>%
-    summarise(team_value = sum(coalesce(bpm, 0) * M_i),
-              n_rated = sum(!is.na(bpm)), .groups = "drop") %>%
+    summarise(team_value = sum(coalesce(player_value, 0) * M_i),
+              n_rated = sum(!is.na(player_value)), .groups = "drop") %>%
     mutate(team_value_net = 5 * team_value)       # x5 = points per 100 possessions vs an average team
   write_csv(team_value_tbl %>% mutate(across(where(is.double), ~ round(.x, 4))),
             file.path(app_dir, "team_value.csv"))
