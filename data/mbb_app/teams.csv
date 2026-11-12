@@ -37,7 +37,7 @@ team_id,team_abbrev,team_name,conference,logo
 166,NMSU,New Mexico State Aggies,Conference USA,https://a.espncdn.com/i/teamlogos/ncaa/500/166.png
 167,UNM,New Mexico Lobos,Mountain West Conference,https://a.espncdn.com/i/teamlogos/ncaa/500/167.png
 171,COLU,Columbia Lions,Ivy League,https://a.espncdn.com/i/teamlogos/ncaa/500/171.png
-172,COR,Cornell Big Red,NA,https://a.espncdn.com/i/teamlogos/ncaa/500/172.png
+172,COR,Cornell Big Red,Ivy League,https://a.espncdn.com/i/teamlogos/ncaa/500/172.png
 179,SBU,St. Bonaventure Bonnies,Atlantic 10 Conference,https://a.espncdn.com/i/teamlogos/ncaa/500/179.png
 183,SYR,Syracuse Orange,Atlantic Coast Conference,https://a.espncdn.com/i/teamlogos/ncaa/500/183.png
 189,BGSU,Bowling Green Falcons,Mid-American Conference,https://a.espncdn.com/i/teamlogos/ncaa/500/189.png
@@ -123,6 +123,7 @@ team_id,team_abbrev,team_name,conference,logo
 2306,KSU,Kansas State Wildcats,Big 12 Conference,https://a.espncdn.com/i/teamlogos/ncaa/500/2306.png
 2309,KENT,Kent State Golden Flashes,Mid-American Conference,https://a.espncdn.com/i/teamlogos/ncaa/500/2309.png
 231,FUR,Furman Paladins,Southern Conference,https://a.espncdn.com/i/teamlogos/ncaa/500/231.png
+232,COFC,Charleston Cougars,Coastal Athletic Association,https://a.espncdn.com/i/teamlogos/ncaa/500/232.png
 2320,LAM,Lamar Cardinals,Southland Conference,https://a.espncdn.com/i/teamlogos/ncaa/500/2320.png
 2325,LAS,La Salle Explorers,Atlantic 10 Conference,https://a.espncdn.com/i/teamlogos/ncaa/500/2325.png
 2329,LEH,Lehigh Mountain Hawks,Patriot League,https://a.espncdn.com/i/teamlogos/ncaa/500/2329.png
@@ -227,6 +228,7 @@ team_id,team_abbrev,team_name,conference,logo
 2608,SMC,Saint Mary's Gaels,West Coast Conference,https://a.espncdn.com/i/teamlogos/ncaa/500/2608.png
 261,UVM,Vermont Catamounts,America East Conference,https://a.espncdn.com/i/teamlogos/ncaa/500/261.png
 2612,SPU,Saint Peter's Peacocks,Metro Conference,https://a.espncdn.com/i/teamlogos/ncaa/500/2612.png
+2617,SFA,Stephen F. Austin Lumberjacks,Southland Conference,https://a.espncdn.com/i/teamlogos/ncaa/500/2617.png
 2619,STBK,Stony Brook Seawolves,Coastal Athletic Association,https://a.espncdn.com/i/teamlogos/ncaa/500/2619.png
 2627,TAR,Tarleton State Texans,United Athletic Conference,https://a.espncdn.com/i/teamlogos/ncaa/500/2627.png
 2628,TCU,TCU Horned Frogs,Big 12 Conference,https://a.espncdn.com/i/teamlogos/ncaa/500/2628.png
