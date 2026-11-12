@@ -3,7 +3,7 @@ name: MBB Daily
 on:
   schedule:
     # 12:00 UTC daily, only during the season (Nov-Apr). Manual runs work any time.
-    - cron: "0 12 * 11-12,1-4 *"
+    - cron: "0 8 * 11-12,1-4 *"
   workflow_dispatch:
 
 permissions:
