@@ -117,7 +117,7 @@ fit_season <- function(szn) {
 
   pt <- pt %>%
     left_join(tm %>% select(team_id, delta, sm2), by = "team_id") %>%
-    mutate(bpm = s * rel + delta * M / sm2)                      # spread the team gap by minutes share
+    mutate(bpm = s * rel + delta)                      
 
   message(sprintf("  %d games | %d teams | %d players | box->team slope %.2f | cor(box value, team net) = %.2f | bpm sd = %.2f",
                   n_g, n_t, nrow(pt), s, cor(tm$tv_raw, tm$net5), sd(pt$bpm)))
